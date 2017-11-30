@@ -1,0 +1,864 @@
+ #include <gamma.h>
+ #include <RGBmatrixPanel.h>
+ #include <Adafruit_GFX.h>
+ 
+ 
+ // define the wiring of the LED screen
+ const uint8_t CLK  = 8;
+ const uint8_t LAT = A3;
+ const uint8_t OE = 9;
+ const uint8_t A = A0;
+ const uint8_t B = A1;
+ const uint8_t C = A2;
+ 
+ // define the wiring of the inputs
+ const int POTENTIOMETER_PIN_NUMBER = 5;
+ const int BUTTON_PIN_NUMBER = 10;
+ 
+ // global constant for the number of Invaders in the game
+ const int NUM_ENEMIES = 16;
+ 
+ // a global variable that represents the LED screen
+ RGBmatrixPanel matrix(A, B, C, CLK, LAT, OE, false);
+ 
+ // the following functions are for printing messages
+ void print_level(int level);
+ void print_lives(int lives);
+ void game_over();
+ 
+ class Color {
+   public:
+     int red;
+     int green;
+     int blue;
+     Color() {
+       red = 0;
+       green = 0;
+       blue = 0;
+     }
+     Color(int r, int g, int b) {
+       red = r;
+       green = g;
+       blue = b;
+     }
+     uint16_t to_333() const {
+       return matrix.Color333(red, green, blue);
+     }
+ };
+ 
+ const Color BLACK(0, 0, 0);
+ const Color RED(4, 0, 0);
+ const Color ORANGE(4, 2, 0);
+ const Color YELLOW(4, 4, 0);
+ const Color GREEN(0, 4, 0);
+ const Color BLUE(0, 0, 4);
+ const Color PURPLE(4, 0, 4);
+ const Color WHITE(4, 4, 4);
+ const Color LIME(2, 4, 0);
+ const Color AQUA(0, 4, 4);
+ 
+ class Invader {
+   public:
+     // Constructors
+     Invader() {
+       x = 0;
+       y = 0;
+       strength = 0;
+     }
+     // sets values for private date members x and y
+     Invader(int x_arg, int y_arg) {
+       x = x_arg;
+       y = y_arg;
+     }
+     // sets values for private data members
+     Invader(int x_arg, int y_arg, int strength_arg) {
+       x = x_arg;
+       y = y_arg;
+       strength = strength_arg;
+     }
+     // sets values for private data members
+     void initialize(int x_arg, int y_arg, int strength_arg) {
+       x = x_arg;
+       y = y_arg;
+       strength = strength_arg;
+     }
+     
+     // getters
+     int get_x() const {
+       return x;
+     }
+     int get_y() const {
+       return y;
+     }
+     int get_strength() const {
+       return strength;
+     }
+ 
+     // Moves the Invader down the screen by one row
+     // Modifies: y
+      void move() {
+       if (y < 16) {
+         y +=1;
+       }
+     }
+     
+     // draws the Invader if its strength is greater than 0
+     // calls: draw_with_rgb
+     void draw() {
+       if (strength > 0) {
+         if (strength == 7) {
+           draw_with_rgb(WHITE, BLUE);
+         }
+         else if (strength == 6) {
+           draw_with_rgb(PURPLE, BLUE);
+         }
+         else if (strength == 5) {
+           draw_with_rgb(BLUE, BLUE);
+         }
+         else if (strength == 4) {
+           draw_with_rgb(GREEN, BLUE);
+         }
+         else if (strength == 3) {
+           draw_with_rgb(YELLOW, BLUE);
+         }
+         else if (strength == 2) {
+           draw_with_rgb(ORANGE, BLUE);
+         }
+         else if (strength == 1) {
+           draw_with_rgb(RED, BLUE);
+         }
+       }
+     }
+     
+     // draws black where the Invader used to be
+     // calls: draw_with_rgb
+     void erase() {
+       if (strength == 0) {
+         draw_with_rgb(BLACK, BLACK);
+       }
+     }    
+     
+     // Invader is hit by a Cannonball.
+     // Modifies: strength
+     // calls: draw, erase
+     void hit() {
+        if (strength >= 0 && strength < 8) {
+          draw();
+          strength--;
+        }
+        else if (strength == 0) {
+          erase();
+        }
+     }
+ 
+   private:
+     int x;
+     int y;
+     int strength;
+     
+     // draws the Invader
+     void draw_with_rgb(Color body_color, Color eye_color) {
+      matrix.drawPixel(x + 2, y - 1, BLACK.to_333());
+        matrix.drawPixel(x + 1, y - 1, BLACK.to_333());
+        matrix.drawPixel(x, y, BLACK.to_333());
+        matrix.drawPixel(x, y, BLACK.to_333());
+        matrix.drawPixel(x + 3, y, BLACK.to_333());
+        matrix.drawPixel(x, y + 3, body_color.to_333());
+        matrix.drawPixel(x + 3, y + 3, body_color.to_333());
+        matrix.drawPixel(x + 1, y, body_color.to_333());
+        matrix.drawPixel(x + 2, y, body_color.to_333());
+        matrix.drawPixel(x, y + 1, body_color.to_333());
+        matrix.drawPixel(x + 3, y + 1, body_color.to_333());
+        matrix.drawPixel(x, y + 2, body_color.to_333());
+        matrix.drawPixel(x + 2, y + 1, eye_color.to_333());
+        matrix.drawPixel(x + 2, y + 2, body_color.to_333());
+        matrix.drawPixel(x + 3, y + 2, body_color.to_333());
+        matrix.drawPixel(x + 1, y + 3, BLACK.to_333());
+        matrix.drawPixel(x + 2, y + 3, BLACK.to_333());
+        matrix.drawPixel(x + 1, y + 1, eye_color.to_333());
+        matrix.drawPixel(x + 1, y + 2, body_color.to_333());
+    }  
+ };
+ 
+ class Cannonball {
+ public:
+     Cannonball() {
+         x = 0;
+         y = 0;
+         fired = false;
+     }
+     
+     // resets private data members to initial values
+     void reset() {
+         x = 0;
+         y = 0;
+         fired = false;
+     }
+     
+     // getters
+     int get_x() const {
+         return x;
+     }
+     int get_y() const {
+         return y;
+     }
+     bool has_been_fired() const {
+         return fired;
+     }
+     
+     // sets private data members
+     void fire(int x_arg, int y_arg) {
+         x = x_arg;
+         y = y_arg;
+         fired = true;
+     }
+     
+     // moves the Cannonball and detects if it goes off the screen
+     // Modifies: y, fired
+     void move() {
+       if (y > 0) {
+         y--;
+       }
+       else {
+         fired = false;
+       }
+     }
+     
+     // resets private data members to initial values
+     void hit() {
+       x = 0;
+       y = 0;
+       fired = false;
+     }
+     
+     // draws the Cannonball, if it is fired
+     void draw() {
+       matrix.drawPixel(x + 1, y, ORANGE.to_333());
+       matrix.drawPixel(x + 1, y + 1, ORANGE.to_333());
+     }
+     
+     // draws black where the Cannonball used to be
+     void erase() {
+       matrix.drawPixel(x + 1, y - 1, BLACK.to_333());
+     }
+ 
+   private:
+     int x;
+     int y;
+     bool fired;
+ };
+ 
+ class Player {
+ public:
+   Player() {
+     x = 0;
+     y = 0;
+     lives = 3;
+   }
+ 
+   // getters
+   int get_x() const {
+     return x;
+   }
+   int get_y() const {
+     return y;
+   }
+   int get_lives() const {
+     return lives;
+   }
+ 
+   // setter
+   void set_x(int x_arg) {
+     x = x_arg;
+   }
+ 
+   // Modifies: lives
+   void die() {
+     lives--;
+   }
+ 
+   // draws the Player
+   // calls: draw_with_rgb
+   void draw() {
+     draw_with_rgb(AQUA);
+ 
+   }
+ 
+   // draws black where the Player used to be
+   // calls: draw_with_rgb
+   void erase() {
+     draw_with_rgb(BLACK);
+   }
+ 
+ private:
+   int x;
+   int y;
+   int lives;
+ 
+   // sets private data members x and y to initial values
+   void initialize(int x_arg, int y_arg) {
+     x = x_arg;
+     y = y_arg;
+   }
+ 
+   // draws the player
+   void draw_with_rgb(Color color) {
+     matrix.drawPixel(x,y + 15, color.to_333());
+     matrix.drawPixel(x + 1, y + 15, color.to_333());
+     matrix.drawPixel(x + 2, y + 15, color.to_333());
+     matrix.drawPixel(x + 1, y + 14, color.to_333());
+   }
+ };
+ 
+ class Game {
+   public:
+     Game() {
+       level = 0;
+       time = 0;
+     }
+     
+     // sets up a new game of Space Invaders
+     // Modifies: global variable matrix
+     // see http://arduino.cc/en/Reference/Setup
+     void setup() {
+       level = 1;
+       int lives = 3;
+       print_lives(lives);
+       delay(500);
+       matrix.fillScreen(matrix.Color333(0,0,0));
+       print_level(level);
+       delay(500);
+       matrix.fillScreen(matrix.Color333(0,0,0));
+       player.draw();
+       int xpos = 0;
+       int ypos = 0;
+       int strgth = 1;
+       for (int i = 0; i < NUM_ENEMIES; i++){
+         enemies[i] = Invader(xpos, ypos, strgth);
+         enemies[i].draw();
+         xpos += 4;
+       }
+     }
+     
+     // advances the game simulation one step and renders the graphics
+     // see spec for details of game
+     // Modifies: global variable matrix
+     void update(int potentiometer_value, bool button_pressed) {
+       int pot = 0;
+       int x_val = 0;
+       int y_val = 12;
+       //player movement update
+       if(potentiometer_value <= 32) {
+        x_val = 0;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 64) {
+        x_val = 1;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 96) {
+        x_val = 2;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 128) {
+        x_val = 3;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 160) {
+        x_val = 4;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 192) {
+        x_val = 5;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 224) {
+        x_val = 6;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 256) {
+        x_val = 7;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 288) {
+        x_val = 8;
+        player.set_x(x_val);
+        player.draw();
+       }
+       else if(potentiometer_value <= 320) {
+        x_val = 9;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 352) {
+        x_val = player.get_x() + 11;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 384) {
+        x_val = 10;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 416) {
+        x_val = 11;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 448) {
+        x_val = 12;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 480) {
+        x_val = 13;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 512) {
+        x_val = 14;
+        player.set_x(x_val);
+        player.draw();
+       }
+       else if(potentiometer_value <= 544) {
+        x_val = 15;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 576) {
+        x_val = 16;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 608) {
+        x_val = 17;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 640) {
+        x_val = 18;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 672) {
+        x_val = 19;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 704) {
+        x_val = 20;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 736) {
+        x_val = 21;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 768) {
+        x_val = 22;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 800) {
+        x_val = 23;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 832) {
+        x_val = 24;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 864) {
+        x_val = 25;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 896) {
+        x_val = 26;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 928) {
+        x_val = 27;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 960) {
+        x_val = 28;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 992) {
+        x_val = 29;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+       else if(potentiometer_value <= 1024) {
+        x_val = 30;
+        player.set_x(x_val);
+        player.draw();
+        player.erase();
+       }
+
+       //cannonball update
+       if(button_pressed == true) {
+        ball.fire(x_val, y_val);
+        ball.draw();
+        ball.erase();
+        ball.move();
+        ball.erase();
+        ball.draw();
+        ball.erase();
+       }
+
+
+       enemies[0].draw();
+       enemies[1].draw();
+       enemies[2].draw();
+       enemies[3].draw();
+       enemies[4].draw();
+       enemies[5].draw();
+       enemies[6].draw();
+       enemies[7].draw();
+       delay(500);
+       enemies[0].move();
+       enemies[1].move();
+       enemies[2].move();
+       enemies[3].move();
+       enemies[4].move();
+       enemies[5].move();
+       enemies[6].move();
+       enemies[7].move();
+       delay(500);
+
+ /*
+       if (digitalRead(BUTTON.PIN.NUMBER) == HIGH) {
+         fired = true;
+         while (fired == true) {
+           ball.fire(pot, 13);
+           ball.draw();
+           ball.move();
+           ball.erase():
+         }
+       }
+       */
+ 
+       //enemies.draw();
+       //enemies.move();
+      /* for (int i = 0; i < NUM_ENEMIES; i++){
+          int i_x = enemies[i].get_x();
+          int i_y = enemies[i].get_y();
+          int c_x = ball.get_x();
+          int c_y = ball.get_y();
+            if (i_x == c_x && i_y == c_y){
+              enemies[i].hit();
+              ball.erase();
+              ball.hit();
+            }
+       
+          int health = enemies[i].get_strength();
+            if (health == 0){
+            enemies[i].erase();
+            }
+
+            int p_x = player.get_x();
+            int p_y = player.get_y();
+              if (i_x == p_x && i_y == p_y){
+                player.die();
+            }
+        }*/
+ 
+ 
+       if (player.get_lives() == 0){
+         player.erase();
+       }
+ 
+       if (level_cleared()){
+         reset_level();
+       }
+       
+     }
+ 
+   private:
+     int level;
+     unsigned long time;
+     Player player;
+     Cannonball ball;
+     Invader enemies[NUM_ENEMIES];
+ 
+     // check if Player defeated all Invaders in current level
+     bool level_cleared() {
+       for (int i = 0; i < NUM_ENEMIES; i++){
+         if (enemies[i].get_strength() != 0){
+           return false;
+         }
+       }
+       return true;
+     }
+ 
+     // set up a level
+     void reset_level() {
+       level++;
+       //need x ,y, strength values for the parameters of the initialize function
+       //Invader.initialize();
+       //LEVEL 2
+       if (level == 2){
+        int lives = 3;
+        lives = player.get_lives();
+        print_lives(lives);
+        delay(5000);
+        matrix.fillScreen(matrix.Color333(0,0,0));
+        print_level(level);
+        delay(5000);
+        matrix.fillScreen(matrix.Color333(0,0,0));
+         //Invaders row 1
+         int xpos = 0;
+         int y1pos = 0;
+         int strgth = 2;
+         for (int i = 1; i < NUM_ENEMIES; i += 2){
+         enemies[i] = Invader(xpos, y1pos, strgth);
+         enemies[i].draw();
+         xpos += 4;
+         }
+         strgth = 1;
+         for (int i = 0; i < NUM_ENEMIES; i += 2){
+         enemies[i] = Invader(xpos, y1pos, strgth);
+         enemies[i].draw();
+         xpos += 4;
+         }
+         //Invaders row 2
+         xpos = 0;
+         int y2pos = 4;
+         strgth = 2;
+         for (int i = 0; i < NUM_ENEMIES; i += 2){
+         enemies[i] = Invader(xpos, y2pos, strgth);
+         enemies[i].draw();
+         xpos += 4;
+         }
+         strgth = 1;
+         for (int i = 1; i < NUM_ENEMIES; i += 2){
+         enemies[i] = Invader(xpos, y2pos, strgth);
+         enemies[i].draw();
+         xpos += 4;
+         }
+       }
+       //LEVEL 3
+       else if (level == 3){
+        int lives = 3;
+        lives = player.get_lives();
+        print_lives(lives);
+        delay(5000);
+        matrix.fillScreen(matrix.Color333(0,0,0));
+        print_level(level);
+        delay(5000);
+        matrix.fillScreen(matrix.Color333(0,0,0));
+         //Invaders row 1
+         int xpos = 0;
+         int y1pos = 0;
+         int strgth = 1;
+         for (int i = 0; i < NUM_ENEMIES; i++){
+            enemies[i] = Invader(xpos, y1pos, strgth);
+            enemies[i].draw();
+            xpos += 4;
+            strgth++;
+              if (strgth == 6){
+                strgth = 0;
+              }
+            strgth++;
+         }
+         //Invaders row 2
+         int y2pos = 1;
+         strgth = 4;
+         for (int i = 0; i < NUM_ENEMIES; i++){
+            enemies[i] = Invader(xpos, y2pos, strgth);
+            enemies[i].draw();
+            xpos += 4;
+              if (strgth == 6){
+                strgth = 0;
+              }
+            strgth++;
+         }
+       }
+        //LEVEL 4
+      else if (level == 4) {
+        int lives = 3;
+        lives = player.get_lives();
+        print_lives(lives);
+        delay(5000);
+        matrix.fillScreen(matrix.Color333(0,0,0));
+        print_level(level);
+        delay(5000);
+        matrix.fillScreen(matrix.Color333(0,0,0));
+        //invader row 1
+        int xpos = 0;
+        int y1pos = 0;
+        int strgth = 5;
+        for (int i = 0; i < NUM_ENEMIES; i += 2) {
+          enemies[i] = Invader(xpos, y1pos, strgth);
+          enemies[i].draw();
+          xpos += 4;
+        }
+        strgth = 4;
+        for (int i = 1; i < NUM_ENEMIES; i += 2) {
+          enemies[i] = Invader(xpos, y1pos, strgth);
+          enemies[i].draw();
+          xpos += 4;
+        }
+        //invader row 2
+        int y2pos = 4;
+        strgth = 2;
+        for (int i = 0; i < NUM_ENEMIES; i += 2) {
+          enemies[i] = Invader(xpos, y2pos, strgth);
+          enemies[i].draw();
+          xpos += 4;
+        }
+        strgth = 3;
+        for (int i = 1; i < NUM_ENEMIES; i+= 2) {
+          enemies[i] = Invader(xpos, y2pos, strgth);
+          enemies[i].draw();
+          xpos += 4;
+        }
+       }
+       //Level 5 and after
+       else {
+        int lives = 3;
+        lives = player.get_lives();
+        print_lives(lives);
+        delay(5000);
+        matrix.fillScreen(matrix.Color333(0,0,0));
+        print_level(level);
+        delay(5000);
+        matrix.fillScreen(matrix.Color333(0,0,0));
+        int xpos = 0;
+        int y1pos = 0;
+        int strgth = 0;
+        strgth = random(1,8);
+        for (int i = 0; i < NUM_ENEMIES; i += 2) {
+          enemies[i] = Invader(xpos, y1pos, strgth);
+          enemies[i].draw();
+          xpos += 4;
+          strgth = random(1,8);
+        }
+        int y2pos = 4;
+         for (int i = 0; i < NUM_ENEMIES; i += 2) {
+          enemies[i] = Invader(xpos, y2pos, strgth);
+          enemies[i].draw();
+          xpos += 4;
+          strgth = random(1,8);
+        }
+       }
+     }
+ };
+ 
+ // a global variable that represents the game Space Invaders
+ Game game;
+ 
+ // see http://arduino.cc/en/Reference/Setup
+ void setup() {
+   Serial.begin(9600);
+   pinMode(BUTTON_PIN_NUMBER, INPUT);
+   matrix.begin();
+   game.setup();
+ }
+ 
+ // see http://arduino.cc/en/Reference/Loop
+ void loop() {
+   int potentiometer_value = analogRead(POTENTIOMETER_PIN_NUMBER);
+   bool button_pressed = (digitalRead(BUTTON_PIN_NUMBER) == HIGH);
+ 
+   game.update(potentiometer_value, button_pressed);
+ }
+ 
+ //for print functions we need to use setCursor, setTextColor and setTextSize
+  // displays Level
+  void print_level(int level) {
+   //size, color
+    matrix.setCursor (0, 0);
+    matrix.setTextColor(GREEN.to_333());
+    matrix.setTextSize(1);
+    matrix.print('L');
+    matrix.print('e');
+    matrix.print('v');
+    matrix.print('e');
+    matrix.print('l');
+    matrix.print(':');
+    matrix.print('<');
+    matrix.setTextColor(ORANGE.to_333());
+    matrix.print(level);
+    matrix.setTextColor(GREEN.to_333());
+    matrix.print('>');
+    
+  }
+  // displays number of lives
+  void print_lives(int lives) {
+    matrix.setCursor (0, 0);
+    matrix.setTextColor(GREEN.to_333());
+    matrix.setTextSize(1);
+    matrix.print('L');
+    matrix.print('i');
+    matrix.print('v');
+    matrix.print('e');
+    matrix.print('s');
+    matrix.print(':');
+    matrix.print('<');
+    matrix.setTextColor(ORANGE.to_333());
+    matrix.print(lives);
+    matrix.setTextColor(GREEN.to_333());
+    matrix.print('>');
+  }
+  // displays "game over"
+  void game_over() {
+     matrix.setCursor (0, 0);
+     matrix.setTextColor(RED.to_333());
+     matrix.setTextSize(1);
+     matrix.print('G');
+     matrix.print('a');
+     matrix.print('m');
+     matrix.print('e');
+     matrix.print(' ');
+     matrix.print('O');
+     matrix.print('v');
+     matrix.print('e');
+     matrix.print('r');
+}
+
+  
